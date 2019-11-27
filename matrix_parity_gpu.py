@@ -25,29 +25,44 @@ parity_kernel = cupy.ReductionKernel(
     'parity'
 )
 
+def check(n):
+    count = 0
+    while n:
+        count += 1
+        n &= n - 1
+    return count
+
+begin_gen = time()
 matrix = numpy.random.randint(
-    0, 1 << bit_length, (size,) * 2, dtype_from_bit[bit_length])
+    0, 1 << bit_length, (size, size), dtype_from_bit[bit_length]
+)
+end_gen = time()
 print('mem', matrix.__sizeof__())
+print('gen', end_gen - begin_gen)
 
 begin_mv = time()
 matrix_gpu = cupy.asarray(matrix)
 end_mv = time()
 print('move', end_mv - begin_mv)
 
-sleep(1)
+sleep(2)
 
 begin_gpu = time()
-parity0_gpu = parity_kernel(matrix_gpu, axis=0)
-parity1_gpu = parity_kernel(matrix_gpu, axis=1)
+parity0_in_gpu = parity_kernel(matrix_gpu, axis=0)
+parity1_in_gpu = parity_kernel(matrix_gpu, axis=1)
+parity0_from_gpu = parity0_in_gpu.get()
+parity1_from_gpu = parity1_in_gpu.get()
 end_gpu = time()
 print('gpu', end_gpu - begin_gpu)
 
-begin = time()
+begin_cpu = time()
 parity0 = numpy.bitwise_xor.reduce(matrix)
 parity1 = numpy.bitwise_xor.reduce(matrix, 1)
-end = time()
-print('cpu', end - begin)
+end_cpu = time()
+print('cpu', end_cpu - begin_cpu)
 
 print(
     'check',
-    (parity0_gpu.get() ^ parity0).sum() + (parity1_gpu.get() ^ parity1).sum())
+    sum(map(check, parity0_from_gpu ^ parity0))
+    + sum(map(check, parity1_from_gpu ^ parity1)),
+)
