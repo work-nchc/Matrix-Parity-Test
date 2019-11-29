@@ -1,4 +1,4 @@
-from time import time, sleep
+from time import time
 import numpy
 import cupy
 
@@ -42,10 +42,9 @@ print('gen', end_gen - begin_gen)
 
 begin_mv = time()
 matrix_gpu = cupy.asarray(matrix)
+cupy.cuda.Stream.null.synchronize()
 end_mv = time()
 print('move', end_mv - begin_mv)
-
-sleep(2)
 
 begin_gpu = time()
 parity0_in_gpu = parity_kernel(matrix_gpu, axis=0)

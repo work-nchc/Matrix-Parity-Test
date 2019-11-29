@@ -56,15 +56,9 @@ begin_mv = time()
 for i in range(n_gpu):
     with cupy.cuda.Device(i):
         matrix_gpu[i] = cupy.asarray(matrix[i])
+cupy.cuda.Stream.null.synchronize()
 end_mv = time()
 print('move', end_mv - begin_mv)
-
-begin_cpu = time()
-for i in range(n_gpu):
-    parity0[i] = numpy.bitwise_xor.reduce(matrix[i])
-    parity1[i] = numpy.bitwise_xor.reduce(matrix[i], 1)
-end_cpu = time()
-print('cpu', end_cpu - begin_cpu)
 
 begin_gpu = time()
 for i in range(n_gpu):
@@ -77,6 +71,13 @@ for i in range(n_gpu):
         parity1_from_gpu[i] = parity1_in_gpu[i].get()
 end_gpu = time()
 print('gpu', end_gpu - begin_gpu)
+
+begin_cpu = time()
+for i in range(n_gpu):
+    parity0[i] = numpy.bitwise_xor.reduce(matrix[i])
+    parity1[i] = numpy.bitwise_xor.reduce(matrix[i], 1)
+end_cpu = time()
+print('cpu', end_cpu - begin_cpu)
 
 for i in range(n_gpu):
     print(
