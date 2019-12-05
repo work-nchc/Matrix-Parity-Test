@@ -4,8 +4,8 @@ environ['PATH'] = environ['PATH'] + 'N:\\nchc\\cuda101\\bin;'
 import numpy
 import cupy
 
-bit_length = 32
-size = 2 ** 16
+bit_length = 64
+size = 2 ** 17
 n_gpu = 8
 
 print('bit', bit_length)
@@ -38,24 +38,23 @@ def check(n):
 
 begin_gen = time()
 matrix = numpy.random.randint(
-    0, 1 << bit_length, (n_gpu, size, size), dtype_from_bit[bit_length]
+    0, 1 << bit_length, (size, size), dtype_from_bit[bit_length]
 )
 end_gen = time()
 print('mem', matrix.__sizeof__())
 print('gen', end_gen - begin_gen)
 
+begin_mv = time()
 matrix_gpu = [None] * n_gpu
-parity0 = [None] * n_gpu
-parity1 = [None] * n_gpu
 parity0_in_gpu = [None] * n_gpu
 parity1_in_gpu = [None] * n_gpu
-parity0_from_gpu = [None] * n_gpu
-parity1_from_gpu = [None] * n_gpu
-
-begin_mv = time()
+with cupy.cuda.Device(0):
+    parity0_all_gpu = cupy.zeros((n_gpu, size), dtype_from_bit[bit_length])
+    parity0_in_gpu[0] = parity0_all_gpu[0]
+parity1_from_gpu = numpy.zeros(size, dtype_from_bit[bit_length])
 for i in range(n_gpu):
     with cupy.cuda.Device(i):
-        matrix_gpu[i] = cupy.asarray(matrix[i])
+        matrix_gpu[i] = cupy.asarray(matrix[i*size//n_gpu:(i+1)*size//n_gpu])
 cupy.cuda.Stream.null.synchronize()
 end_mv = time()
 print('move', end_mv - begin_mv)
@@ -65,23 +64,29 @@ for i in range(n_gpu):
     with cupy.cuda.Device(i):
         parity0_in_gpu[i] = parity_kernel(matrix_gpu[i], axis=0)
         parity1_in_gpu[i] = parity_kernel(matrix_gpu[i], axis=1)
+with cupy.cuda.Device(0):
+    for i in range(1, n_gpu):
+        parity0_all_gpu[i] = cupy.asarray(parity0_in_gpu[i])
+    cupy.cuda.Stream.null.synchronize()
+    parity0_gpu = parity_kernel(parity0_all_gpu, axis=0)
 for i in range(n_gpu):
     with cupy.cuda.Device(i):
-        parity0_from_gpu[i] = parity0_in_gpu[i].get()
-        parity1_from_gpu[i] = parity1_in_gpu[i].get()
+        parity1_from_gpu[
+            i*size//n_gpu:(i+1)*size//n_gpu] = parity1_in_gpu[i].get()
+with cupy.cuda.Device(0):
+    parity0_from_gpu = parity0_gpu.get()
 end_gpu = time()
 print('gpu', end_gpu - begin_gpu)
 
 begin_cpu = time()
 for i in range(n_gpu):
-    parity0[i] = numpy.bitwise_xor.reduce(matrix[i])
-    parity1[i] = numpy.bitwise_xor.reduce(matrix[i], 1)
+    parity0 = numpy.bitwise_xor.reduce(matrix)
+    parity1 = numpy.bitwise_xor.reduce(matrix, 1)
 end_cpu = time()
 print('cpu', end_cpu - begin_cpu)
 
-for i in range(n_gpu):
-    print(
-        'check',
-        sum(map(check, parity0_from_gpu[i] ^ parity0[i]))
-        + sum(map(check, parity1_from_gpu[i] ^ parity1[i])),
-    )
+print(
+    'check',
+    sum(map(check, parity0_from_gpu ^ parity0))
+    + sum(map(check, parity1_from_gpu ^ parity1)),
+)
